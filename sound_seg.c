@@ -5,10 +5,19 @@
 #include <string.h>
 #include <stdio.h>
 
+typedef struct seg_node {
+    int16_t* data;
+    size_t length;
+    struct seg_node* next;
+
+} seg_node;
 
 struct sound_seg {
     //TODO
+    seg_node* head;
+    size_t total_length;
 };
+
 
 // Load a WAV file into buffer
 void wav_load(const char* filename, int16_t* dest){
