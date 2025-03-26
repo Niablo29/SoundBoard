@@ -21,7 +21,27 @@ struct sound_seg {
 
 // Load a WAV file into buffer
 void wav_load(const char* filename, int16_t* dest){
-    return;
+
+    FILE* fp = fopen(filename, "rb");
+    if (!fp) {
+        fprintf(stderr, "Error: could not open file %s\n", filename);
+        return;
+    }
+    
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    rewind(fp);
+    
+    fseek(fp, 44, SEEK_SET);
+    
+    size_t num_samples = (file_size - 44) / sizeof(int16_t);
+    
+    size_t samples_read = fread(dest, sizeof(int16_t), num_samples, fp);
+    if (samples_read != num_samples) {
+        fprintf(stderr, "Warning: expected %zu samples, but only read %zu\n", num_samples, samples_read);
+    }
+    
+    fclose(fp);
 }
 
 // Create/write a WAV file from buffer
