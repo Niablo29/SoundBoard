@@ -28,11 +28,11 @@ void wav_load(const char* filename, int16_t* dest){
         return;
     }
     
-    fseek(fp, 0, SEEK_END);
+    (void) fseek(fp, 0, SEEK_END);
     long file_size = ftell(fp);
     rewind(fp);
     
-    fseek(fp, 44, SEEK_SET);
+    (void) fseek(fp, 44, SEEK_SET);
     
     size_t num_samples = (file_size - 44) / sizeof(int16_t);
     
@@ -45,7 +45,7 @@ void wav_load(const char* filename, int16_t* dest){
 }
 
 // Create/write a WAV file from buffer
-void wav_save(const char* fname, int16_t* src, size_t len){
+void wav_save(const char* fname, const int16_t* src, size_t len){
     FILE* fp = fopen(fname, "wb");
     if (!fp) {
         fprintf(stderr, "Error: could not open file %s for writing\n", fname);
@@ -94,7 +94,7 @@ struct sound_seg* tr_init() {
 
 // Destroy a sound_seg object and free all allocated memory
 void tr_destroy(struct sound_seg* obj) {
-    if(!obj) return NULL;
+    if(!obj) return;
     seg_node* current = obj->head;
     seg_node* next;
 
