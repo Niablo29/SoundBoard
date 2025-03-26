@@ -273,7 +273,79 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
 
 // Returns a string containing <start>,<end> ad pairs in target
 char* tr_identify(struct sound_seg* target, struct sound_seg* ad){
-    return NULL;
+
+    size_t target_len = tr_length(target);
+    size_t ad_len = tr_length(ad);
+
+    if (ad_len == 0 || target_len < ad_len) {
+        char* empty = malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+
+    int16_t* ad_buf = malloc(ad_len * sizeof(int16_t));
+    int16_t* window_buf = malloc(ad_len * sizeof(int16_t));
+    if (!ad_buf || !window_buf) {
+        free(ad_buf);
+        free(window_buf);
+        return NULL;
+    }
+    
+    tr_read(ad, ad_buf, 0, ad_len);
+    
+    double ref = 0.0;
+    for (size_t i = 0; i < ad_len; i++) {
+        ref += ad_buf[i] * ad_buf[i];
+    }
+    
+    size_t res_capacity = 1024;
+    char* res = malloc(res_capacity);
+    if (!res) {
+        free(ad_buf);
+        free(window_buf);
+        return NULL;
+    }
+    res[0] = '\0';
+    size_t res_length = 0;
+
+    for (size_t pos = 0; pos <= target_len - ad_len; ) {
+        tr_read(target, window_buf, pos, ad_len);
+        
+        double corr = 0.0;
+        for (size_t i = 0; i < ad_len; i++) {
+            corr += window_buf[i] * ad_buf[i];
+        }
+        
+        if (corr >= 0.95 * ref) {
+            char temp[50];
+            int written = snprintf(temp, sizeof(temp), "%zu,%zu\n", pos, pos + ad_len - 1);
+            if (res_length + written + 1 > res_capacity) {
+                res_capacity *= 2;
+                char* new_res = realloc(res, res_capacity);
+                if (!new_res) {
+                    free(res);
+                    free(ad_buf);
+                    free(window_buf);
+                    return NULL;
+                }
+                res = new_res;
+            }
+            strcpy(res + res_length, temp);
+            res_length += written;
+            pos += ad_len;
+        } else {
+            pos++;
+        }
+    }
+    
+    free(ad_buf);
+    free(window_buf);
+    
+    if (res_length == 0) {
+        res[0] = '\0';
+    }
+    
+    return res;
 }
 
 // Insert a portion of src_track into dest_track at position destpos
