@@ -46,7 +46,41 @@ void wav_load(const char* filename, int16_t* dest){
 
 // Create/write a WAV file from buffer
 void wav_save(const char* fname, int16_t* src, size_t len){
-    return;
+    FILE* fp = fopen(fname, "wb");
+    if (!fp) {
+        fprintf(stderr, "Error: could not open file %s for writing\n", fname);
+        return;
+    }
+    
+    uint32_t sample_rate = 8000;
+    uint16_t mono = 1;
+    uint16_t bits_per_sample = 16;
+    uint32_t byte_rate = sample_rate * bits_per_sample / 8;
+    uint16_t block_align = bits_per_sample / 8;
+    uint32_t subchunk2_size = len * bits_per_sample / 8;
+    uint32_t chunk_size = 36 + subchunk2_size;
+    
+    fwrite("RIFF", 1, 4, fp);
+    fwrite(&chunk_size, 4, 1, fp);
+    fwrite("WAVE", 1, 4, fp);
+    
+    fwrite("fmt ", 1, 4, fp);
+    uint32_t subchunk1_size = 16;
+    fwrite(&subchunk1_size, 4, 1, fp);
+    uint16_t audio_format = 1;     // PCM = 1
+    fwrite(&audio_format, 2, 1, fp);
+    fwrite(&mono, 2, 1, fp);
+    fwrite(&sample_rate, 4, 1, fp);
+    fwrite(&byte_rate, 4, 1, fp);
+    fwrite(&block_align, 2, 1, fp);
+    fwrite(&bits_per_sample, 2, 1, fp);
+    
+    fwrite("data", 1, 4, fp);
+    fwrite(&subchunk2_size, 4, 1, fp);
+    
+    fwrite(src, sizeof(int16_t), len, fp);
+    
+    fclose(fp);
 }
 
 // Initialize a new sound_seg object
