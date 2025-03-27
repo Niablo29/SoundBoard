@@ -327,7 +327,6 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     }
 
     track->head = dummy.next;
-    printf("True");
     return true;
 }
 
@@ -400,6 +399,11 @@ char* tr_identify(struct sound_seg* target, struct sound_seg* ad){
     
     free(ad_buf);
     free(window_buf);
+
+    if (res_length > 0 && res[res_length - 1] == '\n') {
+        res[res_length - 1] = '\0';
+        res_length--;
+    }
     
     if (res_length == 0) {
         res[0] = '\0';
