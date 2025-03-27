@@ -318,10 +318,10 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                 }
 
                 track->total_length -= overlap_len;
-                // i = node_start + current->length; 
-                // previous = current;
-                // current = current->next;
-                i = node_start;
+                i = node_start + current->length; 
+                previous = current;
+                current = current->next;
+                // i = node_start;
             }
         }
     }
