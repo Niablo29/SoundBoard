@@ -327,6 +327,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     }
 
     track->head = dummy.next;
+    printf("True");
     return true;
 }
 
