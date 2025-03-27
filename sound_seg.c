@@ -227,7 +227,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
 
     size_t end = pos + len;
     if (end > track->total_length) {
-        end = track->total_length;
+        return true;
     }
     size_t range_len = end - pos;
 
