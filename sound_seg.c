@@ -231,9 +231,9 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     }
     size_t range_len = end - pos;
 
-    if (range_len == 0){
-        return true;
-    }
+    // if (range_len == 0){
+    //     return true;
+    // }
 
     seg_node dummy;
     dummy.next = track->head;
