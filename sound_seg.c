@@ -97,11 +97,14 @@ struct sound_seg* tr_init() {
 void tr_destroy(struct sound_seg* obj) {
     if(!obj) return;
     seg_node* current = obj->head;
-    seg_node* next;
 
     while (current != NULL){
-        next = current->next;
-        free(current->data);
+        seg_node* next = current->next;
+        
+        if (!current->shared) {
+            free(current->data);
+        }
+
         free(current);
         current = next;
     }
