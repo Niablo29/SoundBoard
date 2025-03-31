@@ -421,6 +421,7 @@ char* tr_identify(struct sound_seg* target, struct sound_seg* ad){
 void tr_insert(struct sound_seg* src_track,
             struct sound_seg* dest_track,
             size_t destpos, size_t srcpos, size_t len) {
+
     if(!src_track || !dest_track || len == 0) return;
 
     seg_node* insertion_head = NULL;
@@ -444,12 +445,12 @@ void tr_insert(struct sound_seg* src_track,
         }
 
         size_t start_in_current = 0;
-        if (srcpos < start){
+        if (srcpos > start){
 			start_in_current = srcpos - start;
         }
 
         size_t end_in_current = current->length;
-        if(srcpos + len > end){
+        if(srcpos + len < end){
             end_in_current = srcpos + len - start;
         }
         size_t seg_len = end_in_current - start_in_current;
