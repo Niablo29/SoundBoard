@@ -187,6 +187,9 @@ void tr_write(struct sound_seg* track, int16_t* src, size_t pos, size_t len) {
 
     if (!track || !src || len == 0) return;
 
+    size_t write_start = pos;
+    size_t new_total = write_start + len;
+    
     if (pos >= track->total_length) {
         append_new_node(track, src, len);
         return;
@@ -220,6 +223,31 @@ void tr_write(struct sound_seg* track, int16_t* src, size_t pos, size_t len) {
     if (to_write > 0) {
         append_new_node(track, &src[written], to_write);
     }
+
+    if (new_total < track->total_length) {
+        size_t sum = 0;
+        seg_node* curr = track->head;
+        while (curr) {
+            if (sum + curr->length > new_total) {
+                size_t new_len = new_total - sum;
+                curr->length = new_len;
+                seg_node* tmp;
+                while (curr->next) {
+                    tmp = curr->next;
+                    curr->next = tmp->next;
+                    if (!tmp->shared) {
+                        free(tmp->data);
+                    }
+                    free(tmp);
+                }
+                break;
+            }
+            sum += curr->length;
+            curr = curr->next;
+        }
+        track->total_length = new_total;
+    }
+
 }
 
 // Delete a range of elements from the track
@@ -493,7 +521,6 @@ void tr_insert(struct sound_seg* src_track,
     seg_node* dest_current = dest_track->head;
 
     while (dest_current){
-        size_t node_start = pos_in_dest;
         size_t node_end = pos_in_dest + dest_current->length;
 
         if(destpos < node_end){
