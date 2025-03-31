@@ -224,29 +224,29 @@ void tr_write(struct sound_seg* track, int16_t* src, size_t pos, size_t len) {
         append_new_node(track, &src[written], to_write);
     }
 
-    if (new_total < track->total_length) {
-        size_t sum = 0;
-        seg_node* curr = track->head;
-        while (curr) {
-            if (sum + curr->length > new_total) {
-                size_t new_len = new_total - sum;
-                curr->length = new_len;
-                seg_node* tmp;
-                while (curr->next) {
-                    tmp = curr->next;
-                    curr->next = tmp->next;
-                    if (!tmp->shared) {
-                        free(tmp->data);
-                    }
-                    free(tmp);
-                }
-                break;
-            }
-            sum += curr->length;
-            curr = curr->next;
-        }
-        track->total_length = new_total;
-    }
+    // if (new_total < track->total_length) {
+    //     size_t sum = 0;
+    //     seg_node* curr = track->head;
+    //     while (curr) {
+    //         if (sum + curr->length > new_total) {
+    //             size_t new_len = new_total - sum;
+    //             curr->length = new_len;
+    //             seg_node* tmp;
+    //             while (curr->next) {
+    //                 tmp = curr->next;
+    //                 curr->next = tmp->next;
+    //                 if (!tmp->shared) {
+    //                     free(tmp->data);
+    //                 }
+    //                 free(tmp);
+    //             }
+    //             break;
+    //         }
+    //         sum += curr->length;
+    //         curr = curr->next;
+    //     }
+    //     track->total_length = new_total;
+    // }
 
 }
 
