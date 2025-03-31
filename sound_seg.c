@@ -456,9 +456,15 @@ void tr_insert(struct sound_seg* src_track,
         size_t seg_len = end_in_current - start_in_current;
 
         seg_node* new_node = malloc(sizeof(seg_node));
-        new_node->data = current->data + start_in_current;
+        if(src_track == dest_track){
+            new_node->data = malloc(seg_len * sizeof(int16_t));
+            memcpy(new_node->data, current->data + start_in_current, seg_len * sizeof(int16_t));
+            new_node->shared = false;
+        } else {
+            new_node->data = current->data + start_in_current;
+            new_node->shared = true;
+        }
         new_node->length = seg_len;
-        new_node->shared = true;
         new_node->next = NULL;
 
         if (insertion_head == NULL){
