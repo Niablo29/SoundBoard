@@ -190,6 +190,8 @@ static void append_new_node(struct sound_seg* track, const int16_t* src, size_t 
 
     new_node->parent = NULL;
     new_node->num_children = 0;
+    new_node->children = NULL;
+    new_node->capacity_children = 0; 
 
     track->total_length += len;
 
@@ -558,6 +560,18 @@ void tr_insert(struct sound_seg* src_track,
             new_node->next = NULL;
 
             new_node->parent = current;
+            
+            if (current->capacity_children == 0) {
+                current->capacity_children = 2;
+                current->children = malloc(current->capacity_children * sizeof(child_info));
+            } else if (current->num_children >= current->capacity_children) {
+                current->capacity_children *= 2;
+                current->children = realloc(current->children, current->capacity_children * sizeof(child_info));
+            }
+
+            current->children[current->num_children].start_in_parent = start_in_current;
+            current->children[current->num_children].length_in_parent = seg_len;
+            current->children[current->num_children].child = new_node;
             current->num_children++;
 
             if(insertion_head == NULL) {
