@@ -5,22 +5,11 @@
 #include <string.h>
 #include <stdio.h>
 
-typedef struct child_info {
-    size_t start_in_parent;
-    size_t length_in_parent;
-    struct seg_node* child;
-} child_info;
-
 typedef struct seg_node {
     int16_t* data;
     size_t length;
     bool shared;
     struct seg_node* next;
-
-    struct seg_node* parent;
-    child_info* children;
-    size_t num_children;
-    size_t capacity_children;
 
 } seg_node;
 
@@ -29,78 +18,6 @@ struct sound_seg {
     seg_node* head;
     size_t total_length;
 };
-
-bool can_delete_subrange(seg_node* node, size_t offset, size_t len) {
-
-    if (node->num_children > 0 && node->children == NULL) {
-        return false;
-    }
-
-    for (size_t i = 0; i < node->num_children; i++) {
-        size_t cstart = node->children[i].start_in_parent;
-        size_t cend = cstart + node->children[i].length_in_parent;
-
-        if (!(offset + len <= cstart || cend <= offset)) {
-            return false;
-        }
-
-    }
-
-    return true;
-} 
-
-bool check_source_valid(struct sound_seg* track, size_t srcpos, size_t len) {
-    size_t pos = 0;
-    seg_node* current = track->head;
-    size_t remaining = len;
-
-    while (current && remaining > 0) {
-        size_t start = pos;
-        size_t end = pos + current->length;
-
-        if (srcpos < end && srcpos + len > start) {
-            if (current->parent != NULL || current->num_children > 0) {
-                return false;
-            }
-
-            size_t overlap_start = (srcpos > start) ? srcpos : start;
-            size_t overlap_end = (srcpos + len < end) ? (srcpos + len) : end;
-            remaining -= (overlap_end - overlap_start);
-        }
-
-        pos = end;
-        current = current->next;
-    }
-
-    return (remaining == 0);
-}
-
-bool check_destination_valid(struct sound_seg* track, size_t destpos) {
-    size_t pos = 0;
-    seg_node* current = track->head;
-    seg_node* prev = NULL;
-
-    while (current) {
-        size_t end = pos + current->length;
-        if (destpos < end) {
-            if (current->parent != NULL || current->num_children > 0){
-                return false;
-            }
-
-            if (prev && (prev->parent != NULL || prev->num_children > 0)){
-                return false;
-            }
-
-            return true;
-        }
-
-        pos = end;
-        prev = current;
-        current = current->next;
-    }
-
-    return true;
-}
 
 
 // Load a WAV file into buffer
@@ -210,11 +127,6 @@ static void append_new_node(struct sound_seg* track, const int16_t* src, size_t 
     memcpy(new_node->data, src, len * sizeof(int16_t));
     new_node->length = len;
     new_node->next = NULL;
-
-    new_node->parent = NULL;
-    new_node->num_children = 0;
-    new_node->children = NULL;
-    new_node->capacity_children = 0; 
 
     track->total_length += len;
 
@@ -357,13 +269,12 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             }
             size_t overlap_len   = overlap_end - overlap_start;
 
+            // number of samples before deletion starts
+            size_t node_offset_start = overlap_start - node_start;
+            // number of samples from the start of the node till the deletion ends
+            size_t node_offset_end   = overlap_end   - node_start;
 
             if (overlap_len == current->length) {
-
-                if (current->num_children > 0) {
-                    return false;
-                }
-
                 previous->next = current->next;
                 seg_node* temp = current;
                 current = current->next;
@@ -373,15 +284,6 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                 free(temp->data);
                 free(temp);
             } else {
-                // number of samples before deletion starts
-                size_t node_offset_start = overlap_start - node_start;
-                // number of samples from the start of the node till the deletion ends
-                size_t node_offset_end   = overlap_end   - node_start;
-
-                if (!can_delete_subrange(current, node_offset_start, overlap_len)) {
-                    return false;
-                }
-
                 int16_t* original = current->data;
 
                 size_t left_len  = node_offset_start;
@@ -393,8 +295,6 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     memcpy(right_node->data, &original[node_offset_end], right_len * sizeof(int16_t));
                     right_node->length = right_len;
                     right_node->next = current->next;
-                    right_node->shared = false;
-                    right_node->parent = NULL;
 
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
                     memcpy(left_data, original, left_len * sizeof(int16_t));
@@ -417,14 +317,16 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     memcpy(left_data, original, left_len * sizeof(int16_t));
                     free(original);
 
-                    current->data = left_data;
+                    current->data   = left_data;
                     current->length = left_len;
                 }
 
                 track->total_length -= overlap_len;
                 i = overlap_end;
+                // i = node_start + current->length; 
                 previous = current;
                 current = current->next;
+                // i = node_start;
             }
         }
     }
@@ -519,149 +421,81 @@ char* tr_identify(struct sound_seg* target, struct sound_seg* ad){
 void tr_insert(struct sound_seg* src_track,
             struct sound_seg* dest_track,
             size_t destpos, size_t srcpos, size_t len) {
-                
-    if(!src_track || !dest_track || len == 0) return;
 
-    if (!check_source_valid(src_track, srcpos, len)) {
-        return;
-    }
-    if (!check_destination_valid(dest_track, destpos)) {
-        return;
-    }
+    if(!src_track || !dest_track || len == 0) return;
 
     seg_node* insertion_head = NULL;
     seg_node* insertion_tail = NULL;
+    seg_node* current = src_track->head;
+    size_t remaining = len;
+    size_t pos_in_src = 0;
 
-    if(src_track == dest_track) { 
-        seg_node* current = src_track->head;
-        size_t remaining = len;
-        size_t pos_in_src = 0;
-        while(current && remaining > 0) {
-            size_t start = pos_in_src;
-            size_t end = pos_in_src + current->length;
+	while(current && remaining > 0){
+        size_t start = pos_in_src;
+        size_t end = pos_in_src + current->length;
 
-            if(end <= srcpos) {
-                pos_in_src = end;
-                current = current->next;
-                continue;
-            }
-
-            if(start >= srcpos + len){
-                break;
-            }
-
-            size_t start_in_current = 0;
-            if(srcpos > start){
-                start_in_current = srcpos - start;
-            }
-
-            size_t end_in_current = current->length;
-            if(srcpos + len < end){
-                end_in_current = srcpos + len - start;
-            }
-
-            size_t seg_len = end_in_current - start_in_current;
-            seg_node* new_node = malloc(sizeof(seg_node));
-            new_node->data = current->data + start_in_current;
-            new_node->length = seg_len;
-            new_node->shared = true;
-            new_node->next = NULL;
-
-            new_node->parent = current;
-
-            if (current->capacity_children == 0) {
-                current->capacity_children = 2;
-                current->children = malloc(current->capacity_children * sizeof(child_info));
-            } else if (current->num_children >= current->capacity_children) {
-                current->capacity_children *= 2;
-                current->children = realloc(current->children, current->capacity_children * sizeof(child_info));
-            }
-
-            current->children[current->num_children].start_in_parent = start_in_current;
-            current->children[current->num_children].length_in_parent = seg_len;
-            current->children[current->num_children].child = new_node;
-            current->num_children++;
-
-            if(insertion_head == NULL) {
-                insertion_head = new_node;
-                insertion_tail = new_node;
-            } else {
-                insertion_tail->next = new_node;
-                insertion_tail = new_node;
-            }
-
-            remaining -= seg_len;
+        if (end <= srcpos){
             pos_in_src = end;
-            current = current->next;
+			current = current->next;
+            continue;
         }
-    } else {
-        seg_node* current = src_track->head;
-        size_t remaining = len;
-        size_t pos_in_src = 0;
+		
+        if(start >= srcpos + len){
+            break;
+        }
 
-        while(current && remaining > 0){
-            size_t start = pos_in_src;
-            size_t end = pos_in_src + current->length;
+        size_t start_in_current = 0;
+        if (srcpos > start){
+			start_in_current = srcpos - start;
+        }
 
-            if (end <= srcpos){
-                pos_in_src = end;
-                current = current->next;
-                continue;
-            }
-            
-            if(start >= srcpos + len){
-                break;
-            }
+        size_t end_in_current = current->length;
+        if(srcpos + len < end){
+            end_in_current = srcpos + len - start;
+        }
+        size_t seg_len = end_in_current - start_in_current;
 
-            size_t start_in_current = 0;
-            if (srcpos > start){ 
-                start_in_current = srcpos - start;
-            }
-
-            size_t end_in_current = current->length;
-            if(srcpos + len < end){
-                end_in_current = srcpos + len - start;
-            }
-            size_t seg_len = end_in_current - start_in_current;
-
-            seg_node* new_node = malloc(sizeof(seg_node));
+        seg_node* new_node = malloc(sizeof(seg_node));
+        if(src_track == dest_track){
+            new_node->data = malloc(seg_len * sizeof(int16_t));
+            memcpy(new_node->data, current->data + start_in_current, seg_len * sizeof(int16_t));
+            new_node->shared = false;
+        } else {
             new_node->data = current->data + start_in_current;
-            new_node->length = seg_len;
             new_node->shared = true;
-            new_node->next = NULL;
-
-            new_node->parent = current;
-            current->num_children++;
-
-            if (insertion_head == NULL){
-                insertion_head = new_node;
-                insertion_tail = new_node;
-            } else {
-                insertion_tail->next = new_node;
-                insertion_tail = new_node;
-            }
-
-            remaining -= seg_len;
-            pos_in_src = end;
-            current = current->next;
         }
+        new_node->length = seg_len;
+        new_node->next = NULL;
+
+        if (insertion_head == NULL){
+            insertion_head = new_node;
+            insertion_tail = new_node;
+        } else {
+            insertion_tail->next = new_node;
+            insertion_tail = new_node;
+        }
+
+        remaining -= seg_len;
+        pos_in_src = end;
+        current = current->next;
     }
 
     size_t pos_in_dest = 0;
     seg_node* previous = NULL;
     seg_node* dest_current = dest_track->head;
 
-    while (dest_current) {
+    while (dest_current){
+        size_t node_start = pos_in_dest;
         size_t node_end = pos_in_dest + dest_current->length;
-        if (destpos < node_end) {
+
+        if(destpos < node_end){
             break;
         }
         pos_in_dest = node_end;
-        previous = dest_current;
+        previous  = dest_current;
         dest_current = dest_current->next;
     }
 
-    size_t i = destpos - pos_in_dest;
     if(dest_current == NULL){
         if(previous){
             previous->next = insertion_head;
@@ -673,10 +507,11 @@ void tr_insert(struct sound_seg* src_track,
         return;
     }
 
+    size_t i = destpos - pos_in_dest;
     if(i > 0 && i < dest_current->length){
         size_t left_len = i;
         size_t right_len = dest_current->length - i;
-        
+
         seg_node* right_node = malloc(sizeof(seg_node));
         right_node->data = malloc(right_len * sizeof(int16_t));
         memcpy(right_node->data, dest_current->data + i, right_len * sizeof(int16_t));
@@ -693,7 +528,7 @@ void tr_insert(struct sound_seg* src_track,
             dest_current->next = right_node;
         }
     } else {
-        if (previous){
+		if (previous){
             previous->next = insertion_head;
         } else {
             dest_track->head = insertion_head;
@@ -703,6 +538,5 @@ void tr_insert(struct sound_seg* src_track,
             insertion_tail->next = dest_current;
         }
     }
-    dest_track->total_length += len;
-
+	dest_track->total_length += len;
 }
