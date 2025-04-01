@@ -5,13 +5,22 @@
 #include <string.h>
 #include <stdio.h>
 
+typedef struct child_info {
+    size_t start_in_parent;
+    size_t length_in_parent;
+    struct seg_node* child;
+} child_info;
+
 typedef struct seg_node {
     int16_t* data;
     size_t length;
     bool shared;
     struct seg_node* next;
+
     struct seg_node* parent;
+    child_info* children;
     size_t num_children;
+    size_t capacity_children;
 
 } seg_node;
 
@@ -276,6 +285,21 @@ void tr_write(struct sound_seg* track, int16_t* src, size_t pos, size_t len) {
     }
 }
 
+bool can_delete_subrange(seg_node* node, size_t offset, size_t len) {
+
+    for (size_t i = 0; i < node->num_children; i++) {
+        size_t cstart = node->children[i].start_in_parent;
+        size_t cend = cstart + node->children[i].length_in_parent;
+
+        if (!(offset + len <= cstart || cend <= offset)) {
+            return false;
+        }
+
+    }
+
+    return true;
+}
+
 // Delete a range of elements from the track
 bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     if (!track || len == 0) return true;
@@ -323,17 +347,13 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             }
             size_t overlap_len   = overlap_end - overlap_start;
 
-            // number of samples before deletion starts
-            size_t node_offset_start = overlap_start - node_start;
-            // number of samples from the start of the node till the deletion ends
-            size_t node_offset_end   = overlap_end   - node_start;
 
             if (overlap_len == current->length) {
 
                 if (current->num_children > 0) {
                     return false;
                 }
-                
+
                 previous->next = current->next;
                 seg_node* temp = current;
                 current = current->next;
@@ -343,6 +363,15 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                 free(temp->data);
                 free(temp);
             } else {
+                // number of samples before deletion starts
+                size_t node_offset_start = overlap_start - node_start;
+                // number of samples from the start of the node till the deletion ends
+                size_t node_offset_end   = overlap_end   - node_start;
+
+                if (!can_delete_subrange(current, node_offset_start, overlap_len)) {
+                    return false;
+                }
+
                 int16_t* original = current->data;
 
                 size_t left_len  = node_offset_start;
@@ -354,6 +383,8 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     memcpy(right_node->data, &original[node_offset_end], right_len * sizeof(int16_t));
                     right_node->length = right_len;
                     right_node->next = current->next;
+                    right_node->shared = false;
+                    right_node->parent = NULL;
 
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
                     memcpy(left_data, original, left_len * sizeof(int16_t));
@@ -376,16 +407,14 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     memcpy(left_data, original, left_len * sizeof(int16_t));
                     free(original);
 
-                    current->data   = left_data;
+                    current->data = left_data;
                     current->length = left_len;
                 }
 
                 track->total_length -= overlap_len;
                 i = overlap_end;
-                // i = node_start + current->length; 
                 previous = current;
                 current = current->next;
-                // i = node_start;
             }
         }
     }
