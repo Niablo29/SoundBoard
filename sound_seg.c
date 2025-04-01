@@ -10,6 +10,8 @@ typedef struct seg_node {
     size_t length;
     bool shared;
     struct seg_node* next;
+    struct seg_node* parent;
+    size_t num_children;
 
 } seg_node;
 
@@ -18,6 +20,55 @@ struct sound_seg {
     seg_node* head;
     size_t total_length;
 };
+
+
+bool check_source_valid(struct sound_seg* track, size_t srcpos, size_t len) {
+    size_t pos = 0;
+    seg_node* current = track->head;
+    size_t remaining = len;
+
+    while (current && remaining > 0) {
+        size_t start = pos;
+        size_t end = pos + current->length;
+
+        if (srcpos < end && srcpos + len > start) {
+            if (current->parent != NULL || current->num_children > 0) {
+                return false;
+            }
+
+            size_t overlap_start = (srcpos > start) ? srcpos : start;
+            size_t overlap_end = (srcpos + len < end) ? (srcpos + len) : end;
+            remaining -= (overlap_end - overlap_start);
+        }
+
+        pos = end;
+        current = current->next;
+    }
+
+    return (remaining == 0);
+}
+
+bool check_destination_valid(struct sound_seg* track, size_t destpos) {
+    size_t pos = 0;
+    seg_node* current = track->head;
+    seg_node* prev = NULL;
+
+    while (current) {
+        size_t start = pos;
+        size_t end = pos + current->length;
+        if (destpos < end) {
+            if (current->parent != NULL || current->num_children > 0) return false;
+            if (prev && (prev->parent != NULL || prev->num_children > 0)) return false;
+            return true;
+        }
+
+        pos = end;
+        prev = current;
+        current = current->next;
+    }
+
+    return true;
+}
 
 
 // Load a WAV file into buffer
@@ -127,6 +178,9 @@ static void append_new_node(struct sound_seg* track, const int16_t* src, size_t 
     memcpy(new_node->data, src, len * sizeof(int16_t));
     new_node->length = len;
     new_node->next = NULL;
+
+    new_node->parent = NULL;
+    new_node->num_children = 0;
 
     track->total_length += len;
 
@@ -275,6 +329,11 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             size_t node_offset_end   = overlap_end   - node_start;
 
             if (overlap_len == current->length) {
+
+                if (current->num_children > 0) {
+                    return false;
+                }
+                
                 previous->next = current->next;
                 seg_node* temp = current;
                 current = current->next;
@@ -424,6 +483,13 @@ void tr_insert(struct sound_seg* src_track,
                 
     if(!src_track || !dest_track || len == 0) return;
 
+    if (!check_source_valid(src_track, srcpos, len)) {
+        return;
+    }
+    if (!check_destination_valid(dest_track, destpos)) {
+        return;
+    }
+
     seg_node* insertion_head = NULL;
     seg_node* insertion_tail = NULL;
 
@@ -434,25 +500,37 @@ void tr_insert(struct sound_seg* src_track,
         while(current && remaining > 0) {
             size_t start = pos_in_src;
             size_t end = pos_in_src + current->length;
+
             if(end <= srcpos) {
                 pos_in_src = end;
                 current = current->next;
                 continue;
             }
-            if(start >= srcpos + len)
+
+            if(start >= srcpos + len){
                 break;
+            }
+
             size_t start_in_current = 0;
-            if(srcpos > start)
+            if(srcpos > start){
                 start_in_current = srcpos - start;
+            }
+
             size_t end_in_current = current->length;
-            if(srcpos + len < end)
+            if(srcpos + len < end){
                 end_in_current = srcpos + len - start;
+            }
+
             size_t seg_len = end_in_current - start_in_current;
             seg_node* new_node = malloc(sizeof(seg_node));
             new_node->data = current->data + start_in_current;
             new_node->length = seg_len;
             new_node->shared = true;
             new_node->next = NULL;
+
+            new_node->parent = current;
+            current->num_children++;
+
             if(insertion_head == NULL) {
                 insertion_head = new_node;
                 insertion_tail = new_node;
@@ -460,6 +538,7 @@ void tr_insert(struct sound_seg* src_track,
                 insertion_tail->next = new_node;
                 insertion_tail = new_node;
             }
+
             remaining -= seg_len;
             pos_in_src = end;
             current = current->next;
@@ -499,6 +578,9 @@ void tr_insert(struct sound_seg* src_track,
             new_node->length = seg_len;
             new_node->shared = true;
             new_node->next = NULL;
+
+            new_node->parent = current;
+            current->num_children++;
 
             if (insertion_head == NULL){
                 insertion_head = new_node;
