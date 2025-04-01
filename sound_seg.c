@@ -476,7 +476,10 @@ void tr_insert(struct sound_seg* src_track,
         }
 
         remaining -= seg_len;
-        pos_in_src = end;
+        pos_in_src = start + end_in_current;
+        if (remaining == 0){
+            break;
+        }
         current = current->next;
     }
 
