@@ -30,6 +30,24 @@ struct sound_seg {
     size_t total_length;
 };
 
+bool can_delete_subrange(seg_node* node, size_t offset, size_t len) {
+
+    if (node->num_children > 0 && node->children == NULL) {
+        return false;
+    }
+
+    for (size_t i = 0; i < node->num_children; i++) {
+        size_t cstart = node->children[i].start_in_parent;
+        size_t cend = cstart + node->children[i].length_in_parent;
+
+        if (!(offset + len <= cstart || cend <= offset)) {
+            return false;
+        }
+
+    }
+
+    return true;
+} 
 
 bool check_source_valid(struct sound_seg* track, size_t srcpos, size_t len) {
     size_t pos = 0;
@@ -63,11 +81,16 @@ bool check_destination_valid(struct sound_seg* track, size_t destpos) {
     seg_node* prev = NULL;
 
     while (current) {
-        size_t start = pos;
         size_t end = pos + current->length;
         if (destpos < end) {
-            if (current->parent != NULL || current->num_children > 0) return false;
-            if (prev && (prev->parent != NULL || prev->num_children > 0)) return false;
+            if (current->parent != NULL || current->num_children > 0){
+                return false;
+            }
+
+            if (prev && (prev->parent != NULL || prev->num_children > 0)){
+                return false;
+            }
+
             return true;
         }
 
@@ -285,21 +308,6 @@ void tr_write(struct sound_seg* track, int16_t* src, size_t pos, size_t len) {
     if (to_write > 0) {
         append_new_node(track, &src[written], to_write);
     }
-}
-
-bool can_delete_subrange(seg_node* node, size_t offset, size_t len) {
-
-    for (size_t i = 0; i < node->num_children; i++) {
-        size_t cstart = node->children[i].start_in_parent;
-        size_t cend = cstart + node->children[i].length_in_parent;
-
-        if (!(offset + len <= cstart || cend <= offset)) {
-            return false;
-        }
-
-    }
-
-    return true;
 }
 
 // Delete a range of elements from the track
@@ -560,7 +568,7 @@ void tr_insert(struct sound_seg* src_track,
             new_node->next = NULL;
 
             new_node->parent = current;
-            
+
             if (current->capacity_children == 0) {
                 current->capacity_children = 2;
                 current->children = malloc(current->capacity_children * sizeof(child_info));
