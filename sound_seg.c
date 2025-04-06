@@ -239,8 +239,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
         end = track->total_length;
     }
     size_t range_len = end - pos;
-
-    if (range_len == 0){
+    if (range_len == 0) {
         return true;
     }
 
@@ -250,7 +249,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     seg_node* current  = track->head;
     size_t i = 0;
 
-    while ((current) && (i < end)) {
+    while (current && (i < end)) {
         size_t node_start = i;
         size_t node_end   = i + current->length;
 
@@ -258,57 +257,52 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             i = node_end;
             previous = current;
             current  = current->next;
-        }
-        else if (node_start >= end) {
+        } else if (node_start >= end) {
             break;
-        }
-        else {
-            if (current->shared || current->ref_count > 1) {
-                return false;
-            }
-
-            size_t overlap_start = pos;
+        } else {
+            size_t overlap_start;
             if (node_start > pos) {
                 overlap_start = node_start;
+            } else {
+                overlap_start = pos;
             }
-
-            size_t overlap_end = end;
+            
+            size_t overlap_end;
             if (node_end < end) {
                 overlap_end = node_end;
+            } else {
+                overlap_end = end;
             }
+            
             size_t overlap_len   = overlap_end - overlap_start;
-
-            // number of samples before deletion starts
-            size_t node_offset_start = overlap_start - node_start;
-            // number of samples from the start of the node till the deletion ends
-            size_t node_offset_end   = overlap_end   - node_start;
-
+            
             if (overlap_len == current->length) {
                 previous->next = current->next;
-
                 if (current->shared && current->parent) {
                     current->parent->ref_count--;
-                    
                     if (current->parent->ref_count == 1) {
                         current->parent->shared = false;
                     }
                 } else {
                     free(current->data);
                 }
-
                 seg_node* temp = current;
                 current = current->next;
                 i = node_end;
                 track->total_length -= overlap_len;
-
                 free(temp);
             } else {
+                if (current->shared || current->ref_count > 1) {
+                    return false;
+                }
+                
+                size_t node_offset_start = overlap_start - node_start;
+                size_t node_offset_end   = overlap_end - node_start;
                 int16_t* original = current->data;
-
-                size_t left_len  = node_offset_start;
+                size_t left_len = node_offset_start;
                 size_t right_len = current->length - node_offset_end;
-
-                if ((left_len > 0) && (right_len > 0)) {
+                
+                if (left_len > 0 && right_len > 0) {
                     seg_node* right_node = malloc(sizeof(seg_node));
                     right_node->data = malloc(right_len * sizeof(int16_t));
                     memcpy(right_node->data, &original[node_offset_end], right_len * sizeof(int16_t));
@@ -317,41 +311,39 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     right_node->shared = false;
                     right_node->ref_count = 1;
                     right_node->parent = NULL;
-
+                    
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
                     memcpy(left_data, original, left_len * sizeof(int16_t));
                     free(original);
-
+                    
                     current->data = left_data;
                     current->length = left_len;
                     current->next = right_node;
+                    current->shared = false;
+                    current->ref_count = 1;
                     current->parent = NULL;
-
                 } else if (left_len == 0) {
                     int16_t* right_data = malloc(right_len * sizeof(int16_t));
                     memcpy(right_data, &original[node_offset_end], right_len * sizeof(int16_t));
                     free(original);
-
-                    current->data   = right_data;
+                    
+                    current->data = right_data;
                     current->length = right_len;
                     current->shared = false;
                     current->ref_count = 1;
                     current->parent = NULL;
-
-                } else {
+                } else { 
                     // right_len == 0
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
                     memcpy(left_data, original, left_len * sizeof(int16_t));
                     free(original);
-
-                    current->data   = left_data;
+                    
+                    current->data = left_data;
                     current->length = left_len;
                     current->shared = false;
                     current->ref_count = 1;
                     current->parent = NULL;
-
                 }
-
                 track->total_length -= overlap_len;
                 i = overlap_end;
                 previous = current;
@@ -359,7 +351,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             }
         }
     }
-
+    
     track->head = dummy.next;
     return true;
 }
