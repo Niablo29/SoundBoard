@@ -296,7 +296,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                 i = node_end;
                 free(temp);
             } else {
-                if (current->shared && current->ref_count != NULL) {
+                if (current->shared || current->ref_count != NULL) {
                     return false;
                 }
                 
