@@ -528,9 +528,10 @@ void tr_insert(struct sound_seg* src_track,
         if (prev){
             prev->next = insert_head;
         } else {
-            dest_track->total_length += len;
-            return;
+            dest_track->head = insert_head;
         }
+        dest_track->total_length += len;
+        return;
     }
 
     size_t offset_dest = destpos - pos_in_dest;
