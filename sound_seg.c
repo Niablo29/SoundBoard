@@ -462,38 +462,38 @@ void tr_insert(struct sound_seg* src_track,
     size_t remaining = len;
     size_t pos_in_src = 0;
     seg_node* current_src = src_track->head;
-
-    while (current_src && remaining >  0){
+    
+    while (current_src && remaining > 0) {
         size_t current_start = pos_in_src;
         size_t current_end = pos_in_src + current_src->length;
-
-        if (current_end <= srcpos){
+    
+        if (current_end <= srcpos) {
             pos_in_src = current_end;
             current_src = current_src->next;
             continue;
         }
-
         if (current_start >= srcpos + len){
             break;
         }
-
+    
         size_t i;
         if (srcpos > current_start) {
             i = srcpos - current_start;
         } else {
             i = 0;
         }
-
+        
         size_t available = current_src->length - i;
+        
         size_t take;
         if (available > remaining) {
             take = remaining;
         } else {
             take = available;
         }
-
+    
         seg_node* new_node = malloc(sizeof(seg_node));
-        if(!new_node){
+        if (!new_node){
             return;
         }
 
@@ -505,11 +505,11 @@ void tr_insert(struct sound_seg* src_track,
         new_node->parent = current_src;
 
         current_src->ref_count++;
-
-        if(!insert_head){
+    
+        if (!insert_head) {
             insert_head = new_node;
             insert_tail = new_node;
-        }else{
+        } else {
             insert_tail->next = new_node;
             insert_tail = new_node;
         }
@@ -518,31 +518,50 @@ void tr_insert(struct sound_seg* src_track,
         pos_in_src = current_end;
         current_src = current_src->next;
     }
+    
+    if (src_track != dest_track) {
+        
+        for (seg_node* node = insert_head; node != NULL; node = node->next) {
+            int16_t* new_data = malloc(node->length * sizeof(int16_t));
+            
+            if (!new_data){
+                return;
+            }
 
+            memcpy(new_data, node->data, node->length * sizeof(int16_t));
+            node->data = new_data;
+            node->shared = false;
+            node->ref_count = 1;
+            node->parent = NULL;
+        }
+    }
+    
     size_t pos_in_dest = 0;
     seg_node* prev = NULL;
     seg_node* current_dest = dest_track->head;
 
-    while (current_dest && pos_in_dest + current_dest->length <= destpos){
+    while (current_dest && pos_in_dest + current_dest->length <= destpos) {
         pos_in_dest += current_dest->length;
         prev = current_dest;
         current_dest = current_dest->next;
     }
+    
+    if (!current_dest) {
 
-    if (!current_dest){
-        if (prev){
+        if (prev) {
             prev->next = insert_head;
         } else {
             dest_track->head = insert_head;
         }
+
         dest_track->total_length += len;
         return;
     }
-
+    
     size_t offset_dest = destpos - pos_in_dest;
+    if (offset_dest == 0) {
 
-    if (offset_dest == 0){
-        if (prev){
+        if (prev) {
             prev->next = insert_head;
         } else {
             dest_track->head = insert_head;
@@ -551,21 +570,21 @@ void tr_insert(struct sound_seg* src_track,
         insert_tail->next = current_dest;
         dest_track->total_length += len;
         return;
-    } else if (offset_dest == current_dest->length){
+
+    } else if (offset_dest == current_dest->length) {
         seg_node* temp = current_dest->next;
         current_dest->next = insert_head;
         insert_tail->next = temp;
         dest_track->total_length += len;
         return;
     }
-
+    
     size_t left_len = offset_dest;
     size_t right_len = current_dest->length - offset_dest;
-
     seg_node* right_node = malloc(sizeof(seg_node));
-    if (!right_node){
+
+    if (!right_node)
         return;
-    }
 
     if (src_track == dest_track) {
         right_node->data = current_dest->data + offset_dest;
@@ -574,12 +593,15 @@ void tr_insert(struct sound_seg* src_track,
         right_node->ref_count = 1;
         right_node->parent = current_dest;
         right_node->next = current_dest->next;
-        
-        current_dest->length = left_len;        
+        current_dest->length = left_len;
         current_dest->next = insert_head;
         insert_tail->next = right_node;
     } else {
         right_node->data = malloc(right_len * sizeof(int16_t));
+        if (!right_node->data){
+            return;
+        }
+
         memcpy(right_node->data, current_dest->data + offset_dest, right_len * sizeof(int16_t));
         right_node->length = right_len;
         right_node->shared = false;
@@ -591,6 +613,6 @@ void tr_insert(struct sound_seg* src_track,
         current_dest->next = insert_head;
         insert_tail->next = right_node;
     }
-
+    
     dest_track->total_length += len;
 }
