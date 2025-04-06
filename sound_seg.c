@@ -288,17 +288,19 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
 
                 if (current->shared && current->parent) {
                     current->parent->ref_count--;
-
+                    
                     if (current->parent->ref_count == 1) {
                         current->parent->shared = false;
                     }
+                } else {
+                    free(current->data);
                 }
+
                 seg_node* temp = current;
                 current = current->next;
                 i = node_end;
                 track->total_length -= overlap_len;
 
-                free(temp->data);
                 free(temp);
             } else {
                 int16_t* original = current->data;
