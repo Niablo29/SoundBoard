@@ -273,23 +273,27 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             } else {
                 overlap_end = end;
             }
-            
+
             size_t overlap_len   = overlap_end - overlap_start;
             
             if (overlap_len == current->length) {
                 previous->next = current->next;
+                track->total_length -= overlap_len;
+
                 if (current->shared && current->parent) {
                     current->parent->ref_count--;
+
                     if (current->parent->ref_count == 1) {
                         current->parent->shared = false;
+
                     }
                 } else {
                     free(current->data);
                 }
+                
                 seg_node* temp = current;
                 current = current->next;
                 i = node_end;
-                track->total_length -= overlap_len;
                 free(temp);
             } else {
                 if (current->shared || current->ref_count > 1) {
