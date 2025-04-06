@@ -11,6 +11,7 @@ typedef struct seg_node {
     bool shared;
     int ref_count;
     struct seg_node* next;
+    struct seg_node* parent;
 
 } seg_node;
 
@@ -130,6 +131,7 @@ static void append_new_node(struct sound_seg* track, const int16_t* src, size_t 
     new_node->next = NULL;
     new_node->ref_count = 1;
     new_node->shared = false;
+    new_node->parent = NULL;
 
     track->total_length += len;
 
@@ -283,6 +285,14 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
 
             if (overlap_len == current->length) {
                 previous->next = current->next;
+
+                if (current->shared && current->parent) {
+                    current->parent->ref_count--;
+
+                    if (current->parent->ref_count == 1) {
+                        current->parent->shared = false;
+                    }
+                }
                 seg_node* temp = current;
                 current = current->next;
                 i = node_end;
@@ -304,6 +314,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     right_node->next = current->next;
                     right_node->shared = false;
                     right_node->ref_count = 1;
+                    right_node->parent = NULL;
 
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
                     memcpy(left_data, original, left_len * sizeof(int16_t));
@@ -312,6 +323,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     current->data = left_data;
                     current->length = left_len;
                     current->next = right_node;
+                    current->parent = NULL;
 
                 } else if (left_len == 0) {
                     int16_t* right_data = malloc(right_len * sizeof(int16_t));
@@ -322,6 +334,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     current->length = right_len;
                     current->shared = false;
                     current->ref_count = 1;
+                    current->parent = NULL;
 
                 } else {
                     // right_len == 0
@@ -333,6 +346,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
                     current->length = left_len;
                     current->shared = false;
                     current->ref_count = 1;
+                    current->parent = NULL;
 
                 }
 
@@ -483,6 +497,7 @@ void tr_insert(struct sound_seg* src_track,
         new_node->shared = true;
         new_node->ref_count = 1;
         new_node->next = NULL;
+        new_node->parent = current_src;
 
         current_src->ref_count++;
 
