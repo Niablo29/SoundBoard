@@ -1,14 +1,13 @@
 #TODO
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Werror -fPIC -O2
+# CC = gcc
+# CFLAGS = -Wall -Werror -fPIC
 
-SRC = sound_seg.c
-OBJ = sound_seg.o
+# all: sound_seg.o
 
-all: $(OBJ)
+# sound_seg.o: sound_seg.c
+# 	$(CC) $(CFLAGS) -c sound_seg.c -o sound_seg.o
 
-$(OBJ): $(SRC) $(CC) $(CFLAGS) -c $(SRC) -o $(OBJ)
+# debug:
+# 	$(CC) $(CFLAGS) -DDEBUG -c sound_seg.c -o sound_seg.o
 
-clean:
-	rm -f $(OBJ)
