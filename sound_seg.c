@@ -222,7 +222,7 @@ void tr_write(struct sound_seg* track, int16_t* src, size_t pos, size_t len) {
     }
 }
 
-// Delete a range of elements from the track
+// Delete a range of elements from the track 
 bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     if (!track || len == 0) return true;
     if (pos >= track->total_length) {
