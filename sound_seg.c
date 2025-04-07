@@ -323,10 +323,8 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
 
                 track->total_length -= overlap_len;
                 i = overlap_end;
-                // i = node_start + current->length; 
                 previous = current;
                 current = current->next;
-                // i = node_start;
             }
         }
     }
@@ -479,7 +477,6 @@ void tr_insert(struct sound_seg* src_track,
     seg_node* dest_current = dest_track->head;
 
     while (dest_current){
-        size_t node_start = pos_in_dest;
         size_t node_end = pos_in_dest + dest_current->length;
 
         if(destpos < node_end){
