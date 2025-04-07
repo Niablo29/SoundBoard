@@ -9,9 +9,7 @@ typedef struct seg_node {
     int16_t* data;
     size_t length;
     bool shared;
-    int ref_count;
     struct seg_node* next;
-    struct seg_node* parent;
 
 } seg_node;
 
@@ -129,9 +127,6 @@ static void append_new_node(struct sound_seg* track, const int16_t* src, size_t 
     memcpy(new_node->data, src, len * sizeof(int16_t));
     new_node->length = len;
     new_node->next = NULL;
-    new_node->ref_count = 1;
-    new_node->shared = false;
-    new_node->parent = NULL;
 
     track->total_length += len;
 
@@ -239,7 +234,8 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
         end = track->total_length;
     }
     size_t range_len = end - pos;
-    if (range_len == 0) {
+
+    if (range_len == 0){
         return true;
     }
 
@@ -249,7 +245,7 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
     seg_node* current  = track->head;
     size_t i = 0;
 
-    while (current && (i < end)) {
+    while ((current) && (i < end)) {
         size_t node_start = i;
         size_t node_end   = i + current->length;
 
@@ -257,112 +253,84 @@ bool tr_delete_range(struct sound_seg* track, size_t pos, size_t len) {
             i = node_end;
             previous = current;
             current  = current->next;
-        } else if (node_start >= end) {
+        }
+        else if (node_start >= end) {
             break;
-        } else {
-            size_t overlap_start = (node_start > pos) ? node_start : pos;
-            size_t overlap_end   = (node_end < end) ? node_end : end;
+        }
+        else {
+            size_t overlap_start = pos;
+            if (node_start > pos) {
+                overlap_start = node_start;
+            }
+
+            size_t overlap_end = end;
+            if (node_end < end) {
+                overlap_end = node_end;
+            }
             size_t overlap_len   = overlap_end - overlap_start;
-            
+
+            // number of samples before deletion starts
+            size_t node_offset_start = overlap_start - node_start;
+            // number of samples from the start of the node till the deletion ends
+            size_t node_offset_end   = overlap_end   - node_start;
+
             if (overlap_len == current->length) {
                 previous->next = current->next;
-                if (current->shared && current->parent) {
-                    current->parent->ref_count--;
-                    if (current->parent->ref_count == 1) {
-                        current->parent->shared = false;
-                    }
-                } else {
-                    free(current->data);
-                }
                 seg_node* temp = current;
                 current = current->next;
                 i = node_end;
                 track->total_length -= overlap_len;
+
+                free(temp->data);
                 free(temp);
             } else {
-                // Partial deletion:
-                if (current->shared || current->ref_count > 1) {
-                    // Before aborting, try resolving the shared node.
-                    if (current->shared && current->parent != NULL) {
-                        int16_t* new_data = malloc(current->length * sizeof(int16_t));
-                        if (!new_data)
-                            return false;
-                        memcpy(new_data, current->data, current->length * sizeof(int16_t));
-                        current->data = new_data;
-                        current->shared = false;
-                        current->ref_count = 1;
-                        current->parent = NULL;
-                    } else {
-                        return false;
-                    }
-                }
-                
-                size_t node_offset_start = overlap_start - node_start;
-                size_t node_offset_end   = overlap_end - node_start;
                 int16_t* original = current->data;
-                size_t left_len = node_offset_start;
+
+                size_t left_len  = node_offset_start;
                 size_t right_len = current->length - node_offset_end;
-                
-                if (left_len > 0 && right_len > 0) {
+
+                if ((left_len > 0) && (right_len > 0)) {
                     seg_node* right_node = malloc(sizeof(seg_node));
-                    if (!right_node)
-                        return false;
                     right_node->data = malloc(right_len * sizeof(int16_t));
-                    if (!right_node->data)
-                        return false;
                     memcpy(right_node->data, &original[node_offset_end], right_len * sizeof(int16_t));
                     right_node->length = right_len;
                     right_node->next = current->next;
-                    right_node->shared = false;
-                    right_node->ref_count = 1;
-                    right_node->parent = NULL;
-                    
+
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
-                    if (!left_data)
-                        return false;
                     memcpy(left_data, original, left_len * sizeof(int16_t));
                     free(original);
-                    
+
                     current->data = left_data;
                     current->length = left_len;
                     current->next = right_node;
-                    current->shared = false;
-                    current->ref_count = 1;
-                    current->parent = NULL;
+
                 } else if (left_len == 0) {
                     int16_t* right_data = malloc(right_len * sizeof(int16_t));
-                    if (!right_data)
-                        return false;
                     memcpy(right_data, &original[node_offset_end], right_len * sizeof(int16_t));
                     free(original);
-                    
-                    current->data = right_data;
+
+                    current->data   = right_data;
                     current->length = right_len;
-                    current->shared = false;
-                    current->ref_count = 1;
-                    current->parent = NULL;
-                } else { 
+                } else {
                     // right_len == 0
                     int16_t* left_data = malloc(left_len * sizeof(int16_t));
-                    if (!left_data)
-                        return false;
                     memcpy(left_data, original, left_len * sizeof(int16_t));
                     free(original);
-                    
-                    current->data = left_data;
+
+                    current->data   = left_data;
                     current->length = left_len;
-                    current->shared = false;
-                    current->ref_count = 1;
-                    current->parent = NULL;
                 }
+
                 track->total_length -= overlap_len;
                 i = overlap_end;
+                // i = node_start + current->length; 
                 previous = current;
                 current = current->next;
+                // i = node_start;
             }
         }
     }
-    
+
     track->head = dummy.next;
     return true;
 }
@@ -456,163 +424,113 @@ void tr_insert(struct sound_seg* src_track,
 
     if(!src_track || !dest_track || len == 0) return;
 
-
-    seg_node* insert_head = NULL;
-    seg_node* insert_tail = NULL;
+    seg_node* insertion_head = NULL;
+    seg_node* insertion_tail = NULL;
+    seg_node* current = src_track->head;
     size_t remaining = len;
     size_t pos_in_src = 0;
-    seg_node* current_src = src_track->head;
-    
-    while (current_src && remaining > 0) {
-        size_t current_start = pos_in_src;
-        size_t current_end = pos_in_src + current_src->length;
-    
-        if (current_end <= srcpos) {
-            pos_in_src = current_end;
-            current_src = current_src->next;
+
+	while(current && remaining > 0){
+        size_t start = pos_in_src;
+        size_t end = pos_in_src + current->length;
+
+        if (end <= srcpos){
+            pos_in_src = end;
+			current = current->next;
             continue;
         }
-        if (current_start >= srcpos + len){
+		
+        if(start >= srcpos + len){
             break;
         }
-    
-        size_t i;
-        if (srcpos > current_start) {
-            i = srcpos - current_start;
-        } else {
-            i = 0;
+
+        size_t start_in_current = 0;
+        if (srcpos > start){
+			start_in_current = srcpos - start;
         }
-        
-        size_t available = current_src->length - i;
-        
-        size_t take;
-        if (available > remaining) {
-            take = remaining;
-        } else {
-            take = available;
+
+        size_t end_in_current = current->length;
+        if(srcpos + len < end){
+            end_in_current = srcpos + len - start;
         }
-    
+        size_t seg_len = end_in_current - start_in_current;
+
         seg_node* new_node = malloc(sizeof(seg_node));
-        if (!new_node){
-            return;
-        }
-
-        new_node->data = current_src->data + i;
-        new_node->length = take;
+        new_node->data = current->data + start_in_current;
+        new_node->length = seg_len;
         new_node->shared = true;
-        new_node->ref_count = 1;
         new_node->next = NULL;
-        new_node->parent = current_src;
 
-        current_src->ref_count++;
-    
-        if (!insert_head) {
-            insert_head = new_node;
-            insert_tail = new_node;
+        if (insertion_head == NULL){
+            insertion_head = new_node;
+            insertion_tail = new_node;
         } else {
-            insert_tail->next = new_node;
-            insert_tail = new_node;
+            insertion_tail->next = new_node;
+            insertion_tail = new_node;
         }
 
-        remaining -= take;
-        pos_in_src = current_end;
-        current_src = current_src->next;
+        remaining -= seg_len;
+        pos_in_src = end;
+        current = current->next;
     }
-    
-    if (src_track != dest_track) {
-        
-        for (seg_node* node = insert_head; node != NULL; node = node->next) {
-            int16_t* new_data = malloc(node->length * sizeof(int16_t));
-            
-            if (!new_data){
-                return;
-            }
 
-            memcpy(new_data, node->data, node->length * sizeof(int16_t));
-            node->data = new_data;
-            node->shared = false;
-            node->ref_count = 1;
-            node->parent = NULL;
-        }
-    }
-    
     size_t pos_in_dest = 0;
-    seg_node* prev = NULL;
-    seg_node* current_dest = dest_track->head;
+    seg_node* previous = NULL;
+    seg_node* dest_current = dest_track->head;
 
-    while (current_dest && pos_in_dest + current_dest->length <= destpos) {
-        pos_in_dest += current_dest->length;
-        prev = current_dest;
-        current_dest = current_dest->next;
+    while (dest_current){
+        size_t node_start = pos_in_dest;
+        size_t node_end = pos_in_dest + dest_current->length;
+
+        if(destpos < node_end){
+            break;
+        }
+        pos_in_dest = node_end;
+        previous  = dest_current;
+        dest_current = dest_current->next;
     }
-    
-    if (!current_dest) {
 
-        if (prev) {
-            prev->next = insert_head;
+    if(dest_current == NULL){
+        if(previous){
+            previous->next = insertion_head;
         } else {
-            dest_track->head = insert_head;
+            dest_track->head = insertion_head;
         }
 
         dest_track->total_length += len;
         return;
     }
-    
-    size_t offset_dest = destpos - pos_in_dest;
-    if (offset_dest == 0) {
 
-        if (prev) {
-            prev->next = insert_head;
-        } else {
-            dest_track->head = insert_head;
-        }
+    size_t i = destpos - pos_in_dest;
+    if(i > 0 && i < dest_current->length){
+        size_t left_len = i;
+        size_t right_len = dest_current->length - i;
 
-        insert_tail->next = current_dest;
-        dest_track->total_length += len;
-        return;
-
-    } else if (offset_dest == current_dest->length) {
-        seg_node* temp = current_dest->next;
-        current_dest->next = insert_head;
-        insert_tail->next = temp;
-        dest_track->total_length += len;
-        return;
-    }
-    
-    size_t left_len = offset_dest;
-    size_t right_len = current_dest->length - offset_dest;
-    seg_node* right_node = malloc(sizeof(seg_node));
-
-    if (!right_node)
-        return;
-
-    if (src_track == dest_track) {
-        right_node->data = current_dest->data + offset_dest;
-        right_node->length = right_len;
-        right_node->shared = true;
-        right_node->ref_count = 1;
-        right_node->parent = current_dest;
-        right_node->next = current_dest->next;
-        current_dest->length = left_len;
-        current_dest->next = insert_head;
-        insert_tail->next = right_node;
-    } else {
+        seg_node* right_node = malloc(sizeof(seg_node));
         right_node->data = malloc(right_len * sizeof(int16_t));
-        if (!right_node->data){
-            return;
-        }
-
-        memcpy(right_node->data, current_dest->data + offset_dest, right_len * sizeof(int16_t));
+        memcpy(right_node->data, dest_current->data + i, right_len * sizeof(int16_t));
         right_node->length = right_len;
         right_node->shared = false;
-        right_node->ref_count = 1;
-        right_node->parent = NULL;
-        right_node->next = current_dest->next;
-        
-        current_dest->length = left_len;
-        current_dest->next = insert_head;
-        insert_tail->next = right_node;
+        right_node->next = dest_current->next;
+
+        dest_current->length = left_len;
+
+        dest_current->next = insertion_head;
+        if(insertion_tail){
+            insertion_tail->next = right_node;
+        } else {
+            dest_current->next = right_node;
+        }
+    } else {
+		if (previous){
+            previous->next = insertion_head;
+        } else {
+            dest_track->head = insertion_head;
+        }
+
+        if (insertion_tail){
+            insertion_tail->next = dest_current;
+        }
     }
-    
-    dest_track->total_length += len;
+	dest_track->total_length += len;
 }
